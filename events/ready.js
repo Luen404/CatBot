@@ -20,7 +20,7 @@ module.exports = {
     'Percent.json': {},
     'PointConfig.json': {},
     'users.json': {},
-    'shop.json' : {"items":[]}
+    'Shop.json' : {"items":[]}
 };
 
         for (const [file, data] of Object.entries(defaultData)) {
