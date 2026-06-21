@@ -1,17 +1,21 @@
 const fs = require('fs');
 const path = require('path');
+const loadCommands = require('../Handler/commandHandler');
 
-client.once('ready', () => {
-    console.log(`${client.user.tag} 로그인 완료`);
+module.exports = {
+    name: 'clientReady',
+    once: true,
+    async execute(client) {
+        console.log(`로그인 => ${client.user.tag}`);
 
-    const dataDir = path.join(__dirname, 'data');
+        const dataDir = path.join(process.cwd(), 'data');
 
-    // data 폴더 생성
-    if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir);
-        console.log('data 폴더 생성');
-    }
-const defaultData = {
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+            console.log('data 폴더 생성');
+        }
+
+        const defaultData = {
     'Inventory.json': {},
     'Percent.json': {},
     'PointConfig.json': {},
@@ -19,14 +23,20 @@ const defaultData = {
     'shop.json' : {"items":[]}
 };
 
-for (const [file, data] of Object.entries(defaultData)) {
-    const filePath = path.join(dataDir, file);
+        for (const [file, data] of Object.entries(defaultData)) {
+            const filePath = path.join(dataDir, file);
 
-    if (!fs.existsSync(filePath)) {
-        fs.writeFileSync(
-            filePath,
-            JSON.stringify(data, null, 4),
-            'utf8'
-        );
-    }
-}
+            if (!fs.existsSync(filePath)) {
+                fs.writeFileSync(
+                    filePath,
+                    JSON.stringify(data, null, 4),
+                    'utf8'
+                );
+
+                console.log(`${file} 생성`);
+            }
+        }
+
+        await loadCommands(client);
+    },
+};
