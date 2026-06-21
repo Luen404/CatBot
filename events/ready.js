@@ -3,7 +3,7 @@ const defaultData = {
     'Percent.json': {},
     'PointConfig.json': {},
     'users.json': {},
-    'shop.json' : {items:[]}
+    'shop.json' : {"items":[]}
 };
 
 for (const [file, data] of Object.entries(defaultData)) {
