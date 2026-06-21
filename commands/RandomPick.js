@@ -76,15 +76,13 @@ module.exports = {
         // 4. 결과 출력
         const embed = {
             title: "가챠 결과 안내",
-            description: `${userDisplayName}님이 뽑기 티켓 1장을 사용하여 아래의 아이템을 획득했습니다.`,
+            description: `${userDisplayName}님이 아래의 아이템을 획득했습니다.`,
             color: 0x5865F2,
             fields: [
                 { name: "획득 아이템", value: pickedItem.name, inline: true },
                 { name: "등장 확률", value: `${pickedItem.chance}%`, inline: true },
                 { name: "남은 티켓", value: `${users[userID].Ticket}장`, inline: false }
             ],
-            footer: { text: "획득한 아이템은 /보관함 명령어로 확인할 수 있습니다." },
-            timestamp: new Date()
         };
 
         await interaction.reply({ embeds: [embed] });
