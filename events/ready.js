@@ -17,7 +17,7 @@ module.exports = {
 
         const defaultData = {
     'Inventory.json': {},
-    'Percent.json': {},
+    'Percent.json': {"items":[]},
     'PointConfig.json': {},
     'users.json': {},
     'Shop.json' : {"items":[]}
