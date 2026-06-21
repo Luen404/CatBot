@@ -112,8 +112,8 @@ module.exports = {
         }
 
         const descriptionMessage = isSaved 
-            ? `${interaction.user.username}님이 뽑은 결과이며, 개인 보관함에 저장되었습니다.`
-            : `${interaction.user.username}님이 뽑은 결과입니다.`;
+            ? `@<${interaction.user.displayName}>님이 뽑은 결과이며, 개인 보관함에 저장되었습니다.`
+            : `@<${interaction.user.displayName}>님이 뽑은 결과입니다.`;
 
         const embed = {
             title: "뽑기 결과",

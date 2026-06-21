@@ -61,7 +61,7 @@ module.exports = {
 
         if (!users[targetUser.id]) {
             users[targetUser.id] = {
-                tag: interaction.guild.members.cache.get(targetUser.id)?.displayName || targetUser.username,
+                tag: interaction.guild.members.cache.get(targetUser.id)?.displayName || targetUser.displayName,
                 Ticket: 0,
                 Point: 0
             };
@@ -79,7 +79,7 @@ module.exports = {
             saveUsers(users);
             
             return interaction.reply({ 
-                content: `${targetUser.username}님에게 ${currencyName} ${amount}${unit}을 지급했습니다. 현재 보유: ${users[targetUser.id][currency]}${unit}`,
+                content: `${targetUser.displayName}님에게 ${currencyName} ${amount}${unit}을 지급했습니다. 현재 보유: ${users[targetUser.id][currency]}${unit}`,
                 ephemeral: true
             });
         } 
@@ -93,7 +93,7 @@ module.exports = {
             saveUsers(users);
 
             return interaction.reply({ 
-                content: `${targetUser.username}님의 ${currencyName}을 ${amount}${unit} 차감했습니다. 현재 보유: ${users[targetUser.id][currency]}${unit}`,
+                content: `${targetUser.displayName}님의 ${currencyName}을 ${amount}${unit} 차감했습니다. 현재 보유: ${users[targetUser.id][currency]}${unit}`,
                 ephemeral: true
             });
         }

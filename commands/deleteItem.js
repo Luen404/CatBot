@@ -41,13 +41,13 @@ module.exports = {
         const userItems = inventory[targetUser.id] || [];
 
         if (userItems.length === 0) {
-            return interaction.reply({ content: `${targetUser.username}님의 보관함이 비어 있습니다.`, ephemeral: true });
+            return interaction.reply({ content: `${targetUser.displayName}님의 보관함이 비어 있습니다.`, ephemeral: true });
         }
 
         const matchingItemsCount = userItems.filter(item => item.name === itemName).length;
 
         if (matchingItemsCount === 0) {
-            return interaction.reply({ content: `${targetUser.username}님의 보관함에 [${itemName}] 아이템이 존재하지 않습니다.`, ephemeral: true });
+            return interaction.reply({ content: `${targetUser.displayName}님의 보관함에 [${itemName}] 아이템이 존재하지 않습니다.`, ephemeral: true });
         }
 
         let removedCount = 0;
@@ -65,7 +65,7 @@ module.exports = {
         saveInventory(inventory);
 
         await interaction.reply({
-            content: `${targetUser.username}님의 보관함에서 [${itemName}] 아이템을 ${removedCount}개 차감 완료했습니다. (요청 수량: ${amount}개)`
+            content: `${targetUser.displayName}님의 보관함에서 [${itemName}] 아이템을 ${removedCount}개 차감 완료했습니다. (요청 수량: ${amount}개)`
         });
     }
 };
