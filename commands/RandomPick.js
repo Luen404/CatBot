@@ -39,6 +39,47 @@ module.exports = {
             return interaction.reply({ content: `뽑기 티켓이 부족합니다. (필요: 1장 / 보유: ${currentTicket}장)\n상점에서 포인트를 사용해 티켓을 구매할 수 있습니다.`, ephemeral: true });
         }
 
+        // 1. Math.floor를 제외한 0 이상 100 미만의 소수점 난수 생성
+        const randomNumber = Math.random() * 100;
+
+        let accumulate = 0;
+        let pickedItem = null;
+
+        // 2. 기존 'chance' 키값을 사용하여 누적 확률 계산
+        for (const item of percentData.items) {
+            accumulate += item.chance;
+            if (randomNumber < accumulate) {
+                pickedItem = item;
+                break;
+            }
+        }
+
+        if (!pickedItem) {
+            pickedItem = percentData.items[percentData.items.length - 1];
+        }
+
+        // 3. 차감 및 저장
+        users[userID].Ticket -= 1;
+        saveJson(usersPath, users);
+
+        const inventory = readJson(inventoryPath, {});
+        if (!inventory[userID]) inventory[userID] = [];
+
+        inventory[userID].push({
+            itemId: pickedItem.id || `gacha_${Date.now()}`,
+            name: pickedItem.name,
+            obtainedAt: new Date().toISOString()
+        });
+        saveJson(inventoryPath, inventory);
+
+        // 4. 결과 출력 (서버 닉네임 반영)
+        const embed = {
+            title: "가챠 결과 안내",
+        if (!users[userID] || !users[userID].Ticket || users[userID].Ticket < 1) {
+            const currentTicket = users[userID] ? (users[userID].Ticket || 0) : 0;
+            return interaction.reply({ content: `뽑기 티켓이 부족합니다. (필요: 1장 / 보유: ${currentTicket}장)\n상점에서 포인트를 사용해 티켓을 구매할 수 있습니다.`, ephemeral: true });
+        }
+
         // 1. Math.floor를 쓰지 않고 0 이상 100 미만의 소수점 난수를 생성 (0.1% 판별 핵심)
         const randomNumber = Math.random() * 100;
 
