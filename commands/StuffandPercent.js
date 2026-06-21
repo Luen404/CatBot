@@ -42,7 +42,7 @@ module.exports = {
 
             const embed = {
                 title: "뽑기 설정 컨트롤 패널",
-                description: `${statusMessage}\n\n현재 총 확률 합계: ${totalChance}% (정확히 100%여야 가챠가 정상 작동합니다.)`,
+                description: `${statusMessage}\n\n현재 총 확률 합계: ${parseFloat(totalChance.toFixed(4))}% (정확히 100%여야 가챠가 정상 작동합니다.)`,
                 color: 0x5865F2,
                 fields: config.items.map(i => ({ 
                     name: i.name, 
@@ -135,7 +135,7 @@ module.exports = {
                 await i.update({
                     embeds: [{
                         title: `대기중: ${selectedAction === 'name' ? '새 이름' : '새 확률'} 입력`,
-                        description: `${targetItem.name}의 ${selectedAction === 'name' ? '새로운 이름을' : '새로운 확률 숫자를'} 채팅창에 그대로 타이핑해 주세요.\n(30초 제한, 완료 후 본인 메시지는 자동 삭제됩니다.)`,
+                        description: `${targetItem.name}의 ${selectedAction === 'name' ? '새로운 이름을' : '새로운 확률 숫자를(예: 0.1, 1.5)'} 채팅창에 그대로 타이핑해 주세요.\n(30초 제한, 완료 후 본인 메시지는 자동 삭제됩니다.)`,
                         color: 0xFA8072
                     }],
                     components: []
@@ -163,12 +163,12 @@ module.exports = {
                         }, 3000);
                     }
                     else if (selectedAction === 'chance') {
-                        const parsedChance = parseInt(inputData);
-                        if (isNaN(parsedChance)) {
+                        const parsedChance = parseFloat(inputData);
+                        if (isNaN(parsedChance) || parsedChance <= 0) {
                             selectedAction = null;
                             
                             await i.editReply({
-                                embeds: [{ title: "입력 오류", description: "확률은 숫자만 입력해야 합니다.", color: 0xED4245 }],
+                                embeds: [{ title: "입력 오류", description: "확률은 0보다 큰 올바른 숫자(소수 가능)여야 합니다.", color: 0xED4245 }],
                                 components: []
                             });
 
@@ -180,12 +180,12 @@ module.exports = {
                                 .filter(item => item.id !== selectedItemId)
                                 .reduce((sum, item) => sum + item.chance, 0);
 
-                            if (otherItemsChance + parsedChance > 100) {
+                            if (parseFloat((otherItemsChance + parsedChance).toFixed(4)) > 100) {
                                 selectedAction = null;
                                 await i.editReply({
                                     embeds: [{ 
                                         title: "변경 실패", 
-                                        description: `확률 합산이 100%를 초과합니다. (현재 다른 품목들의 합: ${otherItemsChance}%, 입력한 값: ${parsedChance}%)`, 
+                                        description: `확률 합산이 100%를 초과합니다. (현재 다른 품목들의 합: ${parseFloat(otherItemsChance.toFixed(4))}%, 입력한 값: ${parsedChance}%)`, 
                                         color: 0xED4245 
                                     }],
                                     components: []
@@ -224,7 +224,7 @@ module.exports = {
                 await i.update({
                     embeds: [{
                         title: '새 품목 추가',
-                        description: "추가할 품목의 이름과 확률을 /로 구분해서 채팅창에 전송해주세요.\n(예시: 냥민의 모에모에큥/100)",
+                        description: "추가할 품목의 이름과 확률을 /로 구분해서 채팅창에 전송해주세요.\n(예시: 냥민의 초희귀 칭호/0.1)",
                         color: 0x57F287
                     }],
                     components: []
@@ -250,11 +250,11 @@ module.exports = {
                     }
 
                     const name = parts[0].trim();
-                    const chance = parseInt(parts[1].trim());
+                    const chance = parseFloat(parts[1].trim());
 
-                    if (isNaN(chance)) {
+                    if (isNaN(chance) || chance <= 0) {
                         await i.editReply({
-                            embeds: [{ title: "추가 실패", description: "확률은 숫자여야 합니다. 추가가 취소되었습니다.", color: 0xED4245 }],
+                            embeds: [{ title: "추가 실패", description: "확률은 0보다 큰 숫자여야 합니다. 추가가 취소되었습니다.", color: 0xED4245 }],
                             components: []
                         });
                         setTimeout(async () => {
@@ -265,11 +265,11 @@ module.exports = {
 
                     const currentTotalChance = config.items.reduce((sum, item) => sum + item.chance, 0);
 
-                    if (currentTotalChance + chance > 100) {
+                    if (parseFloat((currentTotalChance + chance).toFixed(4)) > 100) {
                         await i.editReply({
                             embeds: [{ 
                                 title: "추가 실패", 
-                                description: `확률 합산이 100%를 초과할 수 없습니다. (현재 합: ${currentTotalChance}%, 입력한 값: ${chance}%)`, 
+                                description: `확률 합산이 100%를 초과할 수 없습니다. (현재 합: ${parseFloat(currentTotalChance.toFixed(4))}%, 입력한 값: ${chance}%)`, 
                                 color: 0xED4245 
                             }],
                             components: []
