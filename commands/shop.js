@@ -3,9 +3,8 @@ const {
     ActionRowBuilder, 
     StringSelectMenuBuilder, 
     StringSelectMenuOptionBuilder,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle
+    ButtonBuilder,
+    ButtonStyle
 } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
@@ -52,7 +51,39 @@ function createShopMessage(userID, allItems) {
     });
 
     const row = new ActionRowBuilder().addComponents(selectMenu);
-    return { embeds: [embed], components: [row] };
+    return { embeds: [embed], components: [row], content: "" };
+}
+
+function createQuantityMessage(userID, item, quantity) {
+    const users = readJson(usersPath, {});
+    const currentPoint = (users[userID] && users[userID].Point) ? users[userID].Point : 0;
+    const totalPrice = item.price * quantity;
+
+    const embed = {
+        title: "포인트 상점",
+        description: `**상품 :** ${item.name}\n\n**가격**\n${item.price}P\n\n**수량**\n${quantity}개\n\n**총 가격**\n${totalPrice}P\n\n현재 보유 포인트: **${currentPoint}P**`,
+        color: 0x5865F2
+    };
+
+    const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('qty_-100').setLabel('-100').setStyle(ButtonStyle.Secondary).setDisabled(quantity <= 100),
+        new ButtonBuilder().setCustomId('qty_-10').setLabel('-10').setStyle(ButtonStyle.Secondary).setDisabled(quantity <= 10),
+        new ButtonBuilder().setCustomId('qty_-1').setLabel('-1').setStyle(ButtonStyle.Secondary).setDisabled(quantity <= 1),
+        new ButtonBuilder().setCustomId('qty_+1').setLabel('+1').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('qty_+10').setLabel('+10').setStyle(ButtonStyle.Secondary)
+    );
+
+    const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('qty_+100').setLabel('+100').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('qty_max').setLabel('최대').setStyle(ButtonStyle.Primary)
+    );
+
+    const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('confirm_buy').setLabel('구매').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('cancel_buy').setLabel('취소').setStyle(ButtonStyle.Danger)
+    );
+
+    return { embeds: [embed], components: [row1, row2, row3], content: "" };
 }
 
 module.exports = {
@@ -64,12 +95,7 @@ module.exports = {
         const shopData = readJson(shopPath, { items: [] });
         const userID = interaction.user.id;
 
-        const fixedTicketItem = {
-            id: "fixed_gacha_ticket",
-            name: "가챠 티켓",
-            price: 1000
-        };
-
+        const fixedTicketItem = { id: "fixed_gacha_ticket", name: "뽑기권", price: 1000 };
         const allItems = [fixedTicketItem, ...shopData.items];
 
         const shopMsg = createShopMessage(userID, allItems);
@@ -77,97 +103,103 @@ module.exports = {
 
         const collector = response.createMessageComponentCollector({ time: 300000 });
 
+        let selectedItem = null;
+        let currentQuantity = 1;
+
         collector.on('collect', async i => {
             if (i.user.id !== interaction.user.id) {
                 return i.reply({ content: "본인의 상점 메뉴만 이용할 수 있습니다.", ephemeral: true });
             }
 
-            const selectedId = i.values[0];
-            const freshShop = readJson(shopPath, { items: [] });
-            const currentAllItems = [fixedTicketItem, ...freshShop.items];
-            const item = currentAllItems.find(idx => idx.id === selectedId);
+            if (i.isStringSelectMenu()) {
+                const selectedId = i.values[0];
+                const freshShop = readJson(shopPath, { items: [] });
+                const currentAllItems = [fixedTicketItem, ...freshShop.items];
+                selectedItem = currentAllItems.find(idx => idx.id === selectedId);
 
-            if (!item) {
-                return i.update({ content: "존재하지 않거나 삭제된 상품입니다.", embeds: [], components: [] });
-            }
-
-            const modalCustomId = `quantity_modal_${Date.now()}`;
-            const modal = new ModalBuilder()
-                .setCustomId(modalCustomId)
-                .setTitle(`${item.name} 구매`);
-
-            const quantityInput = new TextInputBuilder()
-                .setCustomId('quantity_input')
-                .setLabel('구매할 수량을 입력하세요 (숫자만)')
-                .setPlaceholder('예: 5')
-                .setValue('1')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true);
-
-            const modalRow = new ActionRowBuilder().addComponents(quantityInput);
-            modal.addComponents(modalRow);
-
-            await i.showModal(modal);
-
-            try {
-                const modalSubmission = await i.awaitModalSubmit({
-                    filter: m => m.customId === modalCustomId && m.user.id === interaction.user.id,
-                    time: 60000
-                });
-
-                const quantityStr = modalSubmission.fields.getTextInputValue('quantity_input');
-                const quantity = parseInt(quantityStr, 10);
-
-                if (isNaN(quantity) || quantity <= 0) {
-                    return modalSubmission.reply({ content: "올바른 수량을 입력해주세요. (1 이상의 숫자)", ephemeral: true });
+                if (!selectedItem) {
+                    return i.update({ content: "존재하지 않거나 삭제된 상품입니다.", embeds: [], components: [] });
                 }
 
-                const freshUsers = readJson(usersPath, {});
-                if (!freshUsers[userID]) {
-                    freshUsers[userID] = { tag: interaction.member.displayName, Ticket: 0, Point: 0 };
-                }
-                if (freshUsers[userID].Point === undefined) freshUsers[userID].Point = 0;
+                currentQuantity = 1;
+                const quantityMsg = createQuantityMessage(userID, selectedItem, currentQuantity);
+                await i.update(quantityMsg);
+            } 
+            
+            else if (i.isButton()) {
+                const customId = i.customId;
 
-                const totalPrice = item.price * quantity;
+                if (customId.startsWith('qty_')) {
+                    const action = customId.replace('qty_', '');
+                    const users = readJson(usersPath, {});
+                    const userPoint = (users[userID] && users[userID].Point) ? users[userID].Point : 0;
 
-                if (freshUsers[userID].Point < totalPrice) {
-                    return modalSubmission.reply({ 
-                        content: `포인트가 부족합니다.\n필요 포인트: ${totalPrice}P (개당 ${item.price}P × ${quantity}개)\n보유 포인트: ${freshUsers[userID].Point}P`, 
-                        ephemeral: true 
-                    });
-                }
+                    if (action === 'max') {
+                        currentQuantity = Math.floor(userPoint / selectedItem.price);
+                        if (currentQuantity < 1) currentQuantity = 1;
+                    } else {
+                        const amount = parseInt(action, 10);
+                        currentQuantity = Math.max(1, currentQuantity + amount);
+                    }
 
-                freshUsers[userID].Point -= totalPrice;
+                    const updatedQuantityMsg = createQuantityMessage(userID, selectedItem, currentQuantity);
+                    await i.update(updatedQuantityMsg);
+                } 
+                
+                else if (customId === 'cancel_buy') {
+                    selectedItem = null;
+                    const freshShop = readJson(shopPath, { items: [] });
+                    const currentAllItems = [fixedTicketItem, ...freshShop.items];
+                    await i.update(createShopMessage(userID, currentAllItems));
+                } 
+                
+                else if (customId === 'confirm_buy') {
+                    const freshUsers = readJson(usersPath, {});
+                    if (!freshUsers[userID]) {
+                        freshUsers[userID] = { tag: interaction.member.displayName, Ticket: 0, Point: 0 };
+                    }
+                    if (freshUsers[userID].Point === undefined) freshUsers[userID].Point = 0;
 
-                if (item.id === "fixed_gacha_ticket") {
-                    freshUsers[userID].Ticket = (freshUsers[userID].Ticket || 0) + quantity;
-                    saveJson(usersPath, freshUsers);
-                } else {
-                    saveJson(usersPath, freshUsers);
-                    
-                    const inventory = readJson(inventoryPath, {});
-                    if (!inventory[userID]) inventory[userID] = [];
-                    
-                    for (let k = 0; k < quantity; k++) {
-                        inventory[userID].push({
-                            itemId: item.id,
-                            name: item.name,
-                            obtainedAt: new Date().toISOString()
+                    const totalPrice = selectedItem.price * currentQuantity;
+
+                    if (freshUsers[userID].Point < totalPrice) {
+                        return i.reply({ 
+                            content: `포인트가 부족합니다.\n필요 포인트: ${totalPrice}P (개당 ${selectedItem.price}P × ${currentQuantity}개)\n보유 포인트: ${freshUsers[userID].Point}P`, 
+                            ephemeral: true 
                         });
                     }
-                    saveJson(inventoryPath, inventory);
+
+                    freshUsers[userID].Point -= totalPrice;
+
+                    if (selectedItem.id === "fixed_gacha_ticket") {
+                        freshUsers[userID].Ticket = (freshUsers[userID].Ticket || 0) + currentQuantity;
+                        saveJson(usersPath, freshUsers);
+                    } else {
+                        saveJson(usersPath, freshUsers);
+                        
+                        const inventory = readJson(inventoryPath, {});
+                        if (!inventory[userID]) inventory[userID] = [];
+                        
+                        for (let k = 0; k < currentQuantity; k++) {
+                            inventory[userID].push({
+                                itemId: selectedItem.id,
+                                name: selectedItem.name,
+                                obtainedAt: new Date().toISOString()
+                            });
+                        }
+                        saveJson(inventoryPath, inventory);
+                    }
+
+                    await i.reply({
+                        content: `[${selectedItem.name}] ${currentQuantity}개 구매가 완료되었습니다!\n차감 포인트: -${totalPrice}P\n남은 포인트: ${freshUsers[userID].Point}P`,
+                        ephemeral: true
+                    });
+
+                    selectedItem = null;
+                    const freshShop = readJson(shopPath, { items: [] });
+                    const currentAllItems = [fixedTicketItem, ...freshShop.items];
+                    await interaction.editReply(createShopMessage(userID, currentAllItems));
                 }
-
-                await modalSubmission.reply({
-                    content: `[${item.name}] ${quantity}개 구매가 완료되었습니다!\n차감 포인트: -${totalPrice}P\n남은 포인트: ${freshUsers[userID].Point}P`,
-                    ephemeral: true
-                });
-
-                const updatedShopMsg = createShopMessage(userID, currentAllItems);
-                await interaction.editReply(updatedShopMsg);
-
-            } catch (err) {
-                console.error(err);
             }
         });
 

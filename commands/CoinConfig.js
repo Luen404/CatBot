@@ -30,8 +30,8 @@ module.exports = {
                 .setDescription('변경할 재화를 선택하세요')
                 .setRequired(true)
                 .addChoices(
-                    { name: '포인트 (Point)', value: 'Point' },
-                    { name: '뽑기권 (Ticket)', value: 'Ticket' }
+                    { name: '포인트', value: 'Point' },
+                    { name: '뽑기권', value: 'Ticket' }
                 ))
         .addStringOption(option =>
             option.setName('방식')
