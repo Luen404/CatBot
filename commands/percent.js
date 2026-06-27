@@ -36,7 +36,7 @@ module.exports = {
 
         const list = sortedItems
             .map((item, index) => {
-                return `**${index + 1}. ${item.name}**\n└ 확률 : \`${item.chance}%\``;
+                return `${item.name}** 확률 : ${item.chance}%`;
             })
             .join('\n\n');
 
