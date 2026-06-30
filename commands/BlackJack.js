@@ -1,6 +1,6 @@
 
 const { SlashCommandBuilder } = require("discord.js");
-const InteractionHandler = require("../../blackjack/InteractionHandler");
+const InteractionHandler = require("../blackjack/InteractionHandler");
 
 module.exports = {
     data: new SlashCommandBuilder()
