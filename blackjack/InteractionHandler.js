@@ -37,85 +37,50 @@ class InteractionHandler {
     }
 
     async handleButton(interaction) {
-        const id = interaction.customId;
-        const game = GameManager.getGame(interaction.channelId);
+    const id = interaction.customId;
+    const game = GameManager.getGame(interaction.channelId);
 
-        if (!game) {
-            return interaction.reply({ content: "게임이 없습니다.", ephemeral: true });
-        }
+    if (!game) {
+        return interaction.reply({ content: "게임 없음", ephemeral: true });
+    }
 
-        // ================= JOIN =================
-        if (id === "bj_join") {
-            game.joinGame(
-                interaction.channelId,
-                interaction.user.id,
-                interaction.user.username,
-                1000
-            );
+    await interaction.deferUpdate(); // ⭐ 핵심
 
-            return interaction.reply({
-                content: "참가 완료",
-                ephemeral: true
-            });
-        }
+    if (id === "bj_hit") {
+        game.playerHit(interaction.channelId, interaction.user.id);
+    }
 
-        // ================= START =================
-        if (id === "bj_start") {
-            game.startGame(interaction.channelId);
+    if (id === "bj_stand") {
+        game.playerStand(interaction.channelId, interaction.user.id);
+    }
 
-            const turn = game.getCurrentPlayer(interaction.channelId);
+    if (id === "bj_die") {
+        game.playerDie(interaction.channelId, interaction.user.id);
+    }
 
-            const buttons = this.gameButtons();
+    const finished = game.isRoundFinished(interaction.channelId);
 
-            return interaction.update({
-                embeds: [
-                    EmbedBuilder.gameStatus(
-                        this.buildStatus(game, interaction.channelId),
-                        { currentPlayer: turn?.name }
-                    )
-                ],
-                components: [buttons]
-            });
-        }
+    const turn = game.getCurrentPlayer(interaction.channelId);
 
-        // ================= ACTIONS =================
-        if (id === "bj_hit") {
-            game.playerHit(interaction.channelId, interaction.user.id);
-        }
+    if (finished) {
+        const result = game.finishGame(interaction.channelId);
 
-        if (id === "bj_stand") {
-            game.playerStand(interaction.channelId, interaction.user.id);
-        }
-
-        if (id === "bj_die") {
-            game.playerDie(interaction.channelId, interaction.user.id);
-        }
-
-        // ================= FINISH =================
-        if (game.isRoundFinished(interaction.channelId)) {
-            const result = game.finishGame(interaction.channelId);
-
-            return interaction.update({
-                embeds: [
-                    EmbedBuilder.result(result)
-                ],
-                components: []
-            });
-        }
-
-        const turn = game.getCurrentPlayer(interaction.channelId);
-
-        return interaction.update({
-            embeds: [
-                EmbedBuilder.gameStatus(
-                    this.buildStatus(game, interaction.channelId),
-                    { currentPlayer: turn?.name }
-                )
-            ],
-            components: [this.gameButtons()]
+        return interaction.editReply({
+            embeds: [EmbedBuilder.result(result)],
+            components: []
         });
     }
 
+    return interaction.editReply({
+        embeds: [
+            EmbedBuilder.gameStatus(
+                this.buildStatus(game, interaction.channelId),
+                { currentPlayer: turn?.name }
+            )
+        ],
+        components: [this.gameButtons()]
+    });
+    }
     gameButtons() {
         return new ActionRowBuilder().addComponents(
             new ButtonBuilder()
