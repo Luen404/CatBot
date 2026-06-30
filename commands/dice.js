@@ -1,4 +1,12 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const {
+    SlashCommandBuilder,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    AttachmentBuilder
+} = require('discord.js');
+
 const { createCanvas } = require('@napi-rs/canvas');
 const fs = require('fs');
 const path = require('path');
@@ -15,7 +23,7 @@ function loadUserData() {
 }
 
 function saveUserData(data) {
-    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2), 'utf-8');
+    fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
 }
 
 async function renderCanvas(bet, choice) {
@@ -37,7 +45,7 @@ async function renderCanvas(bet, choice) {
     ctx.font = 'bold 28px sans-serif';
     ctx.fillText(`${bet.toLocaleString()}P`, 30, 140);
 
-    ctx.fillStyle = choice ? (choice === 'odd' ? '#3498db' : '#2ecc71') : '#7289da';
+    ctx.fillStyle = choice ? (choice === 'odd' ? '#3498db' : '#2ecc71') : '#728da0';
     ctx.beginPath();
     ctx.arc(320, 100, 40, 0, Math.PI * 2);
     ctx.fill();
@@ -62,15 +70,30 @@ function createComponents(choice) {
         ),
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('bet_+100').setLabel('+100').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('bet_max').setLabel('최대').setStyle(ButtonStyle.Primary)
+            new ButtonBuilder().setCustomId('bet_max').setLabel('MAX').setStyle(ButtonStyle.Primary)
         ),
         new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('choice_odd').setLabel('홀').setStyle(choice === 'odd' ? ButtonStyle.Primary : ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('choice_even').setLabel('짝').setStyle(choice === 'even' ? ButtonStyle.Success : ButtonStyle.Secondary)
+            new ButtonBuilder()
+                .setCustomId('choice_odd')
+                .setLabel('홀')
+                .setStyle(choice === 'odd' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+
+            new ButtonBuilder()
+                .setCustomId('choice_even')
+                .setLabel('짝')
+                .setStyle(choice === 'even' ? ButtonStyle.Primary : ButtonStyle.Secondary)
         ),
         new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('action_confirm').setLabel('실행').setStyle(ButtonStyle.Success).setDisabled(!choice),
-            new ButtonBuilder().setCustomId('action_cancel').setLabel('취소').setStyle(ButtonStyle.Danger)
+            new ButtonBuilder()
+                .setCustomId('action_confirm')
+                .setLabel('실행')
+                .setStyle(ButtonStyle.Success)
+                .setDisabled(!choice),
+
+            new ButtonBuilder()
+                .setCustomId('action_cancel')
+                .setLabel('취소')
+                .setStyle(ButtonStyle.Danger)
         )
     ];
 }
@@ -86,115 +109,149 @@ module.exports = {
 
         if (!users[userId]) {
             users[userId] = { point: 0 };
-            saveUserData(users);
         }
 
-        let currentBet = 100;
+        let currentBet = Math.min(100, users[userId].point);
         let selectedChoice = null;
 
-        if (users[userId].point < currentBet) {
-            currentBet = users[userId].point;
-        }
-
         const attachment = await renderCanvas(currentBet, selectedChoice);
-        const embed = new EmbedBuilder()
+
+        const baseEmbed = new EmbedBuilder()
             .setTitle('🎲 홀짝 배틀')
-            .setDescription(`현재 보유 포인트: **${users[userId].point.toLocaleString()}P**\n베팅을 설정하고 홀/짝을 선택한 뒤 실행하세요.`)
+            .setDescription(`현재 보유 포인트: **${users[userId].point.toLocaleString()}P**\n베팅 후 홀/짝 선택`)
             .setImage('attachment://game.png')
             .setColor('#5865F2');
 
         const message = await interaction.reply({
-            embeds: [embed],
+            embeds: [baseEmbed],
             files: [attachment],
             components: createComponents(selectedChoice),
             fetchReply: true
         });
 
         const collector = message.createMessageComponentCollector({
-            filter: i => i.user.id === interaction.user.id,
+            filter: i => i.user.id === userId,
             time: 60000
         });
 
         collector.on('collect', async i => {
-            await i.deferUpdate();
             const userPoints = users[userId].point;
 
             if (i.customId.startsWith('bet_')) {
                 const action = i.customId.replace('bet_', '');
+
                 if (action === 'max') {
                     currentBet = userPoints;
                 } else {
                     const value = parseInt(action);
-                    currentBet = Math.max(0, Math.min(userPoints, currentBet + value));
+                    currentBet = Math.min(userPoints, Math.max(0, currentBet + value));
                 }
-            } else if (i.customId.startsWith('choice_')) {
+            }
+
+            if (i.customId.startsWith('choice_')) {
                 selectedChoice = i.customId.replace('choice_', '');
-            } else if (i.customId === 'action_cancel') {
-                return collector.stop('canceled');
-            } else if (i.customId === 'action_confirm') {
+            }
+
+            if (i.customId === 'action_cancel') {
+                collector.stop('cancel');
+                return i.update({ components: [] });
+            }
+
+            if (i.customId === 'action_confirm') {
+                if (!selectedChoice) {
+                    return i.followUp({
+                        content: '홀/짝을 먼저 선택하세요.',
+                        ephemeral: true
+                    });
+                }
+
                 if (currentBet <= 0) {
-                    return interaction.followUp({ content: '0P 이상 베팅해야 합니다.', ephemeral: true });
+                    return i.followUp({
+                        content: '0P 이상 베팅해야 합니다.',
+                        ephemeral: true
+                    });
                 }
+
                 if (userPoints < currentBet) {
-                    return interaction.followUp({ content: '보유 포인트가 부족합니다.', ephemeral: true });
+                    return i.followUp({
+                        content: '보유 포인트가 부족합니다.',
+                        ephemeral: true
+                    });
                 }
-                return collector.stop('run');
+
+                collector.stop('run');
+                return i.update({ components: [] });
             }
 
             const nextAttachment = await renderCanvas(currentBet, selectedChoice);
-            const nextEmbed = EmbedBuilder.from(embed).setDescription(`현재 보유 포인트: **${userPoints.toLocaleString()}P**\n베팅을 설정하고 홀/짝을 선택한 뒤 실행하세요.`);
-            await interaction.editReply({ embeds: [nextEmbed], files: [nextAttachment], components: createComponents(selectedChoice) });
+
+            const nextEmbed = new EmbedBuilder()
+                .setTitle('🎲 홀짝 배틀')
+                .setDescription(`현재 보유 포인트: **${userPoints.toLocaleString()}P**`)
+                .setImage('attachment://game.png')
+                .setColor('#5865F2');
+
+            await i.update({
+                embeds: [nextEmbed],
+                files: [nextAttachment],
+                components: createComponents(selectedChoice)
+            });
         });
 
-        collector.on('end', async (collected, reason) => {
-            if (reason === 'canceled') {
+        collector.on('end', async (_, reason) => {
+            if (reason === 'cancel') {
                 return interaction.deleteReply().catch(() => {});
             }
 
             if (reason === 'run') {
                 const dice = Math.floor(Math.random() * 10) + 1;
                 const isOdd = dice % 2 !== 0;
+
                 const resultType = isOdd ? 'odd' : 'even';
                 const resultText = isOdd ? '홀' : '짝';
 
                 const isWin = selectedChoice === resultType;
+
                 const oldPoints = users[userId].point;
-                
+
                 if (isWin) {
                     users[userId].point += currentBet;
                 } else {
                     users[userId].point -= currentBet;
                 }
+
                 saveUserData(users);
 
-                const resultCanvas = createCanvas(400, 200);
-                const ctx = resultCanvas.getContext('2d');
-                ctx.fillStyle = isWin ? '#1f8b4c' : '#ad1457';
-                ctx.fillRect(0, 0, resultCanvas.width, resultCanvas.height);
+                const canvas = createCanvas(400, 200);
+                const ctx = canvas.getContext('2d');
 
-                ctx.fillStyle = '#ffffff';
+                ctx.fillStyle = isWin ? '#1f8b4c' : '#ad1457';
+                ctx.fillRect(0, 0, 400, 200);
+
+                ctx.fillStyle = '#fff';
                 ctx.font = 'bold 28px sans-serif';
                 ctx.textAlign = 'center';
-                ctx.fillText(isWin ? '🎉 승리했습니다!' : '💥 패배했습니다...', 200, 60);
 
+                ctx.fillText(isWin ? '🎉 승리!' : '💥 패배!', 200, 60);
                 ctx.font = '20px sans-serif';
-                ctx.fillText(`주사위 결과: ${dice} (${resultText})`, 200, 110);
-                ctx.fillText(`${oldPoints.toLocaleString()}P ➔ ${users[userId].point.toLocaleString()}P`, 200, 150);
+                ctx.fillText(`결과: ${dice} (${resultText})`, 200, 110);
+                ctx.fillText(`${oldPoints} → ${users[userId].point}`, 200, 150);
 
-                const endAttachment = new AttachmentBuilder(await resultCanvas.encode('png'), { name: 'result.png' });
-                const endEmbed = new EmbedBuilder()
-                    .setTitle(isWin ? '🎰 승리 결과' : '🎰 패배 결과')
-                    .setColor(isWin ? '#2ecc71' : '#e74c3c')
-                    .setImage('attachment://result.png');
+                const resultAttachment = new AttachmentBuilder(await canvas.encode('png'), {
+                    name: 'result.png'
+                });
 
-                return interaction.editReply({ embeds: [endEmbed], files: [endAttachment], components: [] });
+                const resultEmbed = new EmbedBuilder()
+                    .setTitle(isWin ? '🎰 승리' : '🎰 패배')
+                    .setImage('attachment://result.png')
+                    .setColor(isWin ? '#2ecc71' : '#e74c3c');
+
+                return interaction.editReply({
+                    embeds: [resultEmbed],
+                    files: [resultAttachment],
+                    components: []
+                });
             }
-
-            const disabledComponents = createComponents(selectedChoice).map(row => {
-                row.components.forEach(btn => btn.setDisabled(true));
-                return row;
-            });
-            await interaction.editReply({ components: disabledComponents }).catch(() => {});
         });
     }
 };
