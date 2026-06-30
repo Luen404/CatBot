@@ -7,7 +7,6 @@ function calculateSuitWinner(cardA, cardB) {
     };
 
     if (cardA.suit === cardB.suit) return 0;
-
     return order[cardA.suit] - order[cardB.suit];
 }
 
@@ -20,6 +19,8 @@ function getBestCard(hand) {
 }
 
 function resolveResult(player, dealer) {
+    if (player.die) return "dealer";
+
     if (player.bust && dealer.bust) return "dealer";
     if (player.bust) return "dealer";
     if (dealer.bust) return "player";
@@ -42,16 +43,51 @@ function calculatePot(players) {
     let pot = 0;
 
     for (const p of players.values()) {
-        pot += p.bet;
+        if (!p.die) {
+            pot += p.bet;
+        }
     }
 
     return pot;
 }
 
-function calculateWinnings(players, winnerId, pot) {
+function calculateWinnings(players, winnerId, pot, dealerWin = false) {
     const results = [];
 
+    if (dealerWin) {
+        for (const p of players.values()) {
+            if (p.die) {
+                results.push({
+                    id: p.id,
+                    name: p.name,
+                    result: "die",
+                    payout: 0
+                });
+                continue;
+            }
+
+            results.push({
+                id: p.id,
+                name: p.name,
+                result: "lose",
+                payout: 0
+            });
+        }
+
+        return results;
+    }
+
     for (const p of players.values()) {
+        if (p.die) {
+            results.push({
+                id: p.id,
+                name: p.name,
+                result: "die",
+                payout: 0
+            });
+            continue;
+        }
+
         if (p.id === winnerId) {
             results.push({
                 id: p.id,
