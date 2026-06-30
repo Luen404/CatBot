@@ -201,8 +201,8 @@ function buttons() {
 /* ================= COMMAND ================= */
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName("blackjack")
-        .setDescription("블랙잭"),
+        .setName("블랙잭")
+        .setDescription("도박을 해요"),
 
     async execute(interaction) {
         const channelId = interaction.channelId;
