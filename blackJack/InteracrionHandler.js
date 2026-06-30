@@ -1,16 +1,15 @@
 const BlackjackGame = require("./BlackjackGame");
+const EmbedBuilder = require("./EmbedBuilder");
+const ButtonBuilder = require("./ButtonBuilder");
 
 class InteractionHandler {
-    constructor() {
-        this.cooldowns = new Map();
-    }
-
     getGame(channelId) {
         return new BlackjackGame(channelId);
     }
 
-    create(interaction) {
+    async createPanel(interaction) {
         const game = this.getGame(interaction.channelId);
+
         const created = game.create();
 
         if (!created) {
@@ -21,110 +20,143 @@ class InteractionHandler {
         }
 
         return interaction.reply({
-            content: "블랙잭 게임이 생성되었습니다. 참여하세요.",
-            ephemeral: false
+            embeds: [
+                EmbedBuilder.simple("🎴 블랙잭 시작!\n\nJOIN 버튼으로 참가 후 START로 시작하세요.")
+            ],
+            components: [
+                ButtonBuilder.joinButton(),
+                ButtonBuilder.startButton()
+            ]
         });
     }
 
-    join(interaction) {
-        const bet = Number(interaction.options.get("bet").value);
+    async handleButton(interaction) {
+        const id = interaction.customId;
         const game = this.getGame(interaction.channelId);
 
-        const ok = game.join(
-            interaction.user.id,
-            interaction.user.username,
-            bet
-        );
+        // JOIN
+        if (id === "bj_join") {
+            const ok = game.join(
+                interaction.user.id,
+                interaction.user.username,
+                1000
+            );
 
-        if (!ok) {
+            if (!ok) {
+                return interaction.reply({
+                    content: "참가할 수 없습니다.",
+                    ephemeral: true
+                });
+            }
+
             return interaction.reply({
-                content: "참여할 수 없습니다.",
-                ephemeral: true
+                content: `${interaction.user.username} 참가 완료`,
+                ephemeral: false
             });
         }
 
-        return interaction.reply({
-            content: `${interaction.user.username} 참가 완료 (${bet})`,
-            ephemeral: false
-        });
-    }
+        // START
+        if (id === "bj_start") {
+            const ok = game.start();
 
-    start(interaction) {
-        const game = this.getGame(interaction.channelId);
+            if (!ok) {
+                return interaction.reply({
+                    content: "게임을 시작할 수 없습니다.",
+                    ephemeral: true
+                });
+            }
 
-        const ok = game.start();
+            const status = game.status();
 
-        if (!ok) {
-            return interaction.reply({
-                content: "게임을 시작할 수 없습니다.",
-                ephemeral: true
+            return interaction.update({
+                embeds: [
+                    EmbedBuilder.gameStatus(status)
+                ],
+                components: [
+                    ButtonBuilder.gameButtons()
+                ]
             });
         }
 
-        return interaction.reply({
-            content: "게임 시작!",
-            ephemeral: false
-        });
+        // HIT
+        if (id === "bj_hit") {
+            await this.hit(interaction);
+        }
+
+        // STAND
+        if (id === "bj_stand") {
+            await this.stand(interaction);
+        }
+
+        // DIE
+        if (id === "bj_die") {
+            const gameInst = game.getGame(interaction.channelId);
+            const player = gameInst.players.get(interaction.user.id);
+
+            if (!player) {
+                return interaction.reply({
+                    content: "게임 참여자가 아닙니다.",
+                    ephemeral: true
+                });
+            }
+
+            player.die = true;
+            player.stand = true;
+
+            return interaction.reply({
+                content: `${interaction.user.username} DIE (포기)`,
+                ephemeral: false
+            });
+        }
+
+        const finished = await this.finishIfReady(interaction);
+
+        if (!finished) {
+            const status = game.status();
+
+            return interaction.update({
+                embeds: [
+                    EmbedBuilder.gameStatus(status)
+                ],
+                components: [
+                    ButtonBuilder.gameButtons()
+                ]
+            });
+        }
     }
 
-    hit(interaction) {
+    async hit(interaction) {
         const game = this.getGame(interaction.channelId);
 
         const ok = game.hit(interaction.user.id);
 
         if (!ok) {
             return interaction.reply({
-                content: "히트할 수 없습니다.",
+                content: "HIT 불가",
                 ephemeral: true
             });
         }
 
         return interaction.reply({
-            content: `${interaction.user.username} 히트`,
+            content: `${interaction.user.username} HIT`,
             ephemeral: false
         });
     }
 
-    stand(interaction) {
+    async stand(interaction) {
         const game = this.getGame(interaction.channelId);
 
         const ok = game.stand(interaction.user.id);
 
         if (!ok) {
             return interaction.reply({
-                content: "스탠드할 수 없습니다.",
+                content: "STAND 불가",
                 ephemeral: true
             });
         }
 
         return interaction.reply({
-            content: `${interaction.user.username} 스탠드`,
-            ephemeral: false
-        });
-    }
-
-    status(interaction) {
-        const game = this.getGame(interaction.channelId);
-
-        const status = game.status();
-
-        if (!status) {
-            return interaction.reply({
-                content: "진행 중인 게임이 없습니다.",
-                ephemeral: true
-            });
-        }
-
-        let text = `🎴 블랙잭 상태\n\n`;
-
-        for (const p of status.players) {
-            text += `${p.name} | ${p.hand} | ${p.total}\n`;
-        }
-
-        text += `\n딜러: ${status.dealer.hand}`;
-
-        return interaction.reply({
-            content: text,
+            content: `${interaction.user.username} STAND`,
             ephemeral: false
         });
     }
@@ -150,34 +182,6 @@ class InteractionHandler {
 
         return true;
     }
-}
-
-const ButtonBuilder = require("./ButtonBuilder");
-const EmbedBuilder = require("./EmbedBuilder");
-
-async createPanel(interaction) {
-    const game = this.getGame(interaction.channelId);
-
-    if (game.getGame(interaction.channelId)) {
-        return interaction.reply({
-            content: "이미 게임이 진행 중입니다.",
-            ephemeral: true
-        });
-    }
-
-    game.create();
-
-    const embed = EmbedBuilder.simple(
-        "블랙잭 시작!\n\nJOIN 버튼으로 참가하세요.\nSTART로 시작합니다."
-    );
-
-    return interaction.reply({
-        embeds: [embed],
-        components: [
-            ButtonBuilder.joinButton(),
-            ButtonBuilder.startButton()
-        ]
-    });
 }
 
 module.exports = new InteractionHandler();
