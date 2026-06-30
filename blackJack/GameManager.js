@@ -40,28 +40,28 @@ class GameManager {
         const player = new Player(userId, name, bet);
         game.players.set(userId, player);
 
-        return true;
+        return ;
     }
-
     startGame(channelId) {
-        const game = this.games.get(channelId);
-        if (!game || game.started) return false;
-        if (game.players.size === 0) return false;
+    const game = this.games.get(channelId);
+    if (!game || game.started) return false;
+    if (game.players.size === 0) return false;
 
-        game.started = true;
+    game.started = true;
 
-        // 초기 2장 지급
-        for (const player of game.players.values()) {
-            player.addCard(game.deck.draw());
-            player.addCard(game.deck.draw());
-        }
+    game.turnOrder = Array.from(game.players.keys());
+    game.currentTurnIndex = 0;
 
-        game.dealer.addCard(game.deck.draw());
-        game.dealer.addCard(game.deck.draw());
-
-        return true;
+    for (const player of game.players.values()) {
+        player.addCard(game.deck.draw());
+        player.addCard(game.deck.draw());
     }
 
+    game.dealer.addCard(game.deck.draw());
+    game.dealer.addCard(game.deck.draw());
+
+    return true;
+    }
     playerHit(channelId, userId) {
         const game = this.games.get(channelId);
         if (!game || !game.started) return false;
