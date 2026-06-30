@@ -152,4 +152,32 @@ class InteractionHandler {
     }
 }
 
+const ButtonBuilder = require("./ButtonBuilder");
+const EmbedBuilder = require("./EmbedBuilder");
+
+async createPanel(interaction) {
+    const game = this.getGame(interaction.channelId);
+
+    if (game.getGame(interaction.channelId)) {
+        return interaction.reply({
+            content: "이미 게임이 진행 중입니다.",
+            ephemeral: true
+        });
+    }
+
+    game.create();
+
+    const embed = EmbedBuilder.simple(
+        "블랙잭 시작!\n\nJOIN 버튼으로 참가하세요.\nSTART로 시작합니다."
+    );
+
+    return interaction.reply({
+        embeds: [embed],
+        components: [
+            ButtonBuilder.joinButton(),
+            ButtonBuilder.startButton()
+        ]
+    });
+}
+
 module.exports = new InteractionHandler();
