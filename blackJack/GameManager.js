@@ -20,7 +20,9 @@ class GameManager {
             deck: new Deck(),
             dealer: new Dealer(),
             players: new Map(),
-            started: false
+            started: false,
+            turnOrder: [],
+            currentTurnIndex: 0
         };
 
         this.games.set(channelId, game);
@@ -40,31 +42,60 @@ class GameManager {
         const player = new Player(userId, name, bet);
         game.players.set(userId, player);
 
-        return ;
+        return true;
     }
+
     startGame(channelId) {
-    const game = this.games.get(channelId);
-    if (!game || game.started) return false;
-    if (game.players.size === 0) return false;
+        const game = this.games.get(channelId);
+        if (!game || game.started) return false;
 
-    game.started = true;
+        game.started = true;
 
-    game.turnOrder = Array.from(game.players.keys());
-    game.currentTurnIndex = 0;
+        game.turnOrder = Array.from(game.players.keys());
+        game.currentTurnIndex = 0;
 
-    for (const player of game.players.values()) {
-        player.addCard(game.deck.draw());
-        player.addCard(game.deck.draw());
+        for (const p of game.players.values()) {
+            p.addCard(game.deck.draw());
+            p.addCard(game.deck.draw());
+        }
+
+        game.dealer.addCard(game.deck.draw());
+        game.dealer.addCard(game.deck.draw());
+
+        return true;
     }
 
-    game.dealer.addCard(game.deck.draw());
-    game.dealer.addCard(game.deck.draw());
+    getCurrentPlayer(channelId) {
+        const game = this.games.get(channelId);
+        if (!game) return null;
 
-    return true;
+        const id = game.turnOrder[game.currentTurnIndex];
+        return game.players.get(id);
     }
+
+    nextTurn(channelId) {
+        const game = this.games.get(channelId);
+        if (!game) return;
+
+        let loop = 0;
+
+        while (loop < game.turnOrder.length) {
+            game.currentTurnIndex =
+                (game.currentTurnIndex + 1) % game.turnOrder.length;
+
+            const id = game.turnOrder[game.currentTurnIndex];
+            const p = game.players.get(id);
+
+            if (!p.die && !p.bust && !p.stand) return;
+            loop++;
+        }
+    }
+
     playerHit(channelId, userId) {
         const game = this.games.get(channelId);
         if (!game || !game.started) return false;
+
+        if (game.turnOrder[game.currentTurnIndex] !== userId) return false;
 
         const player = game.players.get(userId);
         if (!player || player.stand || player.bust || player.die) return false;
@@ -73,6 +104,7 @@ class GameManager {
 
         if (player.total >= 21) {
             player.setStand();
+            this.nextTurn(channelId);
         }
 
         return true;
@@ -82,10 +114,14 @@ class GameManager {
         const game = this.games.get(channelId);
         if (!game || !game.started) return false;
 
+        if (game.turnOrder[game.currentTurnIndex] !== userId) return false;
+
         const player = game.players.get(userId);
-        if (!player || player.die) return false;
+        if (!player) return false;
 
         player.setStand();
+        this.nextTurn(channelId);
+
         return true;
     }
 
@@ -93,11 +129,15 @@ class GameManager {
         const game = this.games.get(channelId);
         if (!game || !game.started) return false;
 
+        if (game.turnOrder[game.currentTurnIndex] !== userId) return false;
+
         const player = game.players.get(userId);
         if (!player) return false;
 
         player.die = true;
         player.stand = true;
+
+        this.nextTurn(channelId);
 
         return true;
     }
@@ -106,10 +146,8 @@ class GameManager {
         const game = this.games.get(channelId);
         if (!game) return false;
 
-        for (const player of game.players.values()) {
-            if (!player.stand && !player.bust && !player.die) {
-                return false;
-            }
+        for (const p of game.players.values()) {
+            if (!p.stand && !p.bust && !p.die) return false;
         }
 
         return true;
@@ -119,25 +157,23 @@ class GameManager {
         const game = this.games.get(channelId);
         if (!game) return null;
 
-        // 딜러 자동 진행
         game.dealer.play(game.deck);
 
         const pot = calculatePot(game.players);
 
         let winnerId = null;
-        let bestScore = -1;
+        let best = -1;
 
-        // 승자 판정
-        for (const player of game.players.values()) {
-            const result = resolveResult(player, game.dealer);
-            player.result = result;
+        for (const p of game.players.values()) {
+            const result = resolveResult(p, game.dealer);
+            p.result = result;
 
-            if (player.die) continue;
+            if (p.die) continue;
 
             if (result === "player") {
-                if (player.total > bestScore) {
-                    bestScore = player.total;
-                    winnerId = player.id;
+                if (p.total > best) {
+                    best = p.total;
+                    winnerId = p.id;
                 }
             }
         }
