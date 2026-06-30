@@ -1,62 +1,128 @@
+const Deck = require("./Deck");
+const Dealer = require("./Dealer");
+const Player = require("./Player");
+const { compareHands, calculatePayout } = require("./Utils");
+
 class GameManager {
     constructor() {
         this.games = new Map();
     }
 
-    create(channelId, game) {
-        if (this.games.has(channelId)) {
-            return null;
-        }
+    createGame(channelId) {
+        if (this.games.has(channelId)) return null;
+
+        const game = {
+            channelId,
+            deck: new Deck(),
+            dealer: new Dealer(),
+            players: new Map(),
+            started: false
+        };
 
         this.games.set(channelId, game);
-
         return game;
     }
 
-    get(channelId) {
-        return this.games.get(channelId) ?? null;
+    getGame(channelId) {
+        return this.games.get(channelId);
     }
 
-    has(channelId) {
-        return this.games.has(channelId);
-    }
-
-    remove(channelId) {
+    joinGame(channelId, userId, name, bet) {
         const game = this.games.get(channelId);
+        if (!game || game.started) return false;
+        if (game.players.size >= 4) return false;
+        if (game.players.has(userId)) return false;
 
-        if (!game) {
-            return false;
-        }
-
-        if (typeof game.finish === "function") {
-            game.finish();
-        }
-
-        this.games.delete(channelId);
+        const player = new Player(userId, name, bet);
+        game.players.set(userId, player);
 
         return true;
     }
 
-    clear() {
-        for (const game of this.games.values()) {
-            if (typeof game.finish === "function") {
-                game.finish();
-            }
+    startGame(channelId) {
+        const game = this.games.get(channelId);
+        if (!game || game.started) return false;
+        if (game.players.size === 0) return false;
+
+        game.started = true;
+
+        for (const player of game.players.values()) {
+            player.addCard(game.deck.draw());
+            player.addCard(game.deck.draw());
         }
 
-        this.games.clear();
+        game.dealer.addCard(game.deck.draw());
+        game.dealer.addCard(game.deck.draw());
+
+        return true;
     }
 
-    size() {
-        return this.games.size;
+    playerHit(channelId, userId) {
+        const game = this.games.get(channelId);
+        if (!game || !game.started) return false;
+
+        const player = game.players.get(userId);
+        if (!player || player.stand || player.bust) return false;
+
+        player.addCard(game.deck.draw());
+
+        if (player.total >= 21) {
+            player.setStand();
+        }
+
+        return true;
     }
 
-    values() {
-        return [...this.games.values()];
+    playerStand(channelId, userId) {
+        const game = this.games.get(channelId);
+        if (!game || !game.started) return false;
+
+        const player = game.players.get(userId);
+        if (!player) return false;
+
+        player.setStand();
+        return true;
     }
 
-    keys() {
-        return [...this.games.keys()];
+    isRoundFinished(channelId) {
+        const game = this.games.get(channelId);
+        if (!game) return false;
+
+        for (const player of game.players.values()) {
+            if (!player.stand && !player.bust) return false;
+        }
+
+        return true;
+    }
+
+    finishGame(channelId) {
+        const game = this.games.get(channelId);
+        if (!game) return null;
+
+        game.dealer.play(game.deck);
+
+        const results = [];
+
+        for (const player of game.players.values()) {
+            const result = compareHands(player, game.dealer);
+            const payout = calculatePayout(player, result);
+
+            player.result = result;
+
+            results.push({
+                id: player.id,
+                name: player.name,
+                result,
+                payout
+            });
+        }
+
+        this.games.delete(channelId);
+
+        return {
+            dealer: game.dealer,
+            results
+        };
     }
 }
 
