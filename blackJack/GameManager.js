@@ -1,7 +1,7 @@
 const Deck = require("./Deck");
 const Dealer = require("./Dealer");
 const Player = require("./Player");
-const { compareHands, calculatePayout } = require("./Utils");
+const { resolveResult, calculatePot, calculateWinnings } = require("./ResultCalculator");
 
 class GameManager {
     constructor() {
@@ -101,27 +101,46 @@ class GameManager {
 
         game.dealer.play(game.deck);
 
-        const results = [];
+        const pot = calculatePot(game.players);
+
+        let winnerId = null;
+        let bestScore = -1;
 
         for (const player of game.players.values()) {
-            const result = compareHands(player, game.dealer);
-            const payout = calculatePayout(player, result);
+            const result = resolveResult(player, game.dealer);
 
             player.result = result;
 
-            results.push({
-                id: player.id,
-                name: player.name,
-                result,
-                payout
-            });
+            if (result === "player") {
+                if (player.total > bestScore) {
+                    bestScore = player.total;
+                    winnerId = player.id;
+                }
+            }
+        }
+
+        const results = calculateWinnings(game.players, winnerId, pot);
+
+        const dealerWins = winnerId === null;
+
+        if (dealerWins) {
+            for (const p of game.players.values()) {
+                results.push({
+                    id: p.id,
+                    name: p.name,
+                    result: "lose",
+                    payout: 0
+                });
+            }
         }
 
         this.games.delete(channelId);
 
         return {
             dealer: game.dealer,
-            results
+            results,
+            pot,
+            winnerId: dealerWins ? "dealer" : winnerId
         };
     }
 }
