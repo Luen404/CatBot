@@ -7,6 +7,7 @@ const {
     AttachmentBuilder
 } = require('discord.js');
 
+const { createCanvas } = require('@napi-rs/canvas');
 const fs = require('fs');
 const path = require('path');
 
@@ -25,12 +26,19 @@ function saveUserData(data) {
     fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
 }
 
+function ensureUser(users, userId) {
+    if (!users[userId]) {
+        users[userId] = { point: 0 };
+        saveUserData(users);
+    }
+}
+
 async function renderCanvas(bet, choice) {
     const canvas = createCanvas(400, 200);
     const ctx = canvas.getContext('2d');
 
     ctx.fillStyle = '#2c2f33';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, 400, 200);
 
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 24px sans-serif';
@@ -44,7 +52,7 @@ async function renderCanvas(bet, choice) {
     ctx.font = 'bold 28px sans-serif';
     ctx.fillText(`${bet.toLocaleString()}P`, 30, 140);
 
-    ctx.fillStyle = choice ? (choice === 'odd' ? '#3498db' : '#2ecc71') : '#728da0';
+    ctx.fillStyle = choice ? (choice === 'odd' ? '#3498db' : '#2ecc71') : '#7289da';
     ctx.beginPath();
     ctx.arc(320, 100, 40, 0, Math.PI * 2);
     ctx.fill();
@@ -106,9 +114,7 @@ module.exports = {
         const userId = interaction.user.id;
         const users = loadUserData();
 
-        if (!users[userId]) {
-            users[userId] = { point: 0 };
-        }
+        ensureUser(users, userId);
 
         let currentBet = Math.min(100, users[userId].point);
         let selectedChoice = null;
@@ -117,7 +123,7 @@ module.exports = {
 
         const baseEmbed = new EmbedBuilder()
             .setTitle('🎲 홀짝 배틀')
-            .setDescription(`현재 보유 포인트: **${users[userId].point.toLocaleString()}P**\n베팅 후 홀/짝 선택`)
+            .setDescription(`현재 보유 포인트: **${users[userId].point.toLocaleString()}P**`)
             .setImage('attachment://game.png')
             .setColor('#5865F2');
 
@@ -140,7 +146,7 @@ module.exports = {
                 const action = i.customId.replace('bet_', '');
 
                 if (action === 'max') {
-                    currentBet = userPoints;
+                    currentBet = Math.max(0, userPoints);
                 } else {
                     const value = parseInt(action);
                     currentBet = Math.min(userPoints, Math.max(0, currentBet + value));
@@ -185,7 +191,7 @@ module.exports = {
             const nextAttachment = await renderCanvas(currentBet, selectedChoice);
 
             const nextEmbed = new EmbedBuilder()
-                .setTitle('🎲 홀짝 배틀')
+                .setTitle('🎲 홀짝 게임')
                 .setDescription(`현재 보유 포인트: **${userPoints.toLocaleString()}P**`)
                 .setImage('attachment://game.png')
                 .setColor('#5865F2');
@@ -230,6 +236,7 @@ module.exports = {
                 ctx.fillStyle = '#fff';
                 ctx.font = 'bold 28px sans-serif';
                 ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
 
                 ctx.fillText(isWin ? '🎉 승리!' : '💥 패배!', 200, 60);
                 ctx.font = '20px sans-serif';
