@@ -3,11 +3,9 @@ const {
     EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle,
-    AttachmentBuilder
+    ButtonStyle
 } = require('discord.js');
 
-const { createCanvas } = require('@napi-rs/canvas');
 const fs = require('fs');
 const path = require('path');
 
@@ -33,57 +31,7 @@ function ensureUser(users, id) {
     }
 }
 
-async function renderCanvas(bet, choice, step) {
-    const canvas = createCanvas(400, 200);
-    const ctx = canvas.getContext('2d');
-
-    ctx.fillStyle = '#2c2f33';
-    ctx.fillRect(0, 0, 400, 200);
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.fillText('🎲 홀짝 게임', 30, 50);
-
-    ctx.fillStyle = '#99aab5';
-    ctx.font = '16px sans-serif';
-
-    ctx.fillText(
-        step === 'bet'
-            ? '1단계: 베팅 설정'
-            : '2단계: 홀 / 짝 선택',
-        30,
-        80
-    );
-
-    ctx.fillStyle = '#e67e22';
-    ctx.font = 'bold 28px sans-serif';
-    ctx.fillText(`${bet.toLocaleString()}P`, 30, 130);
-
-    ctx.fillStyle = step === 'choice'
-        ? (choice === 'odd' ? '#3498db' : choice === 'even' ? '#2ecc71' : '#7289da')
-        : '#7289da';
-
-    ctx.beginPath();
-    ctx.arc(320, 100, 40, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    ctx.fillText(
-        step === 'choice'
-            ? (choice === 'odd' ? '홀' : choice === 'even' ? '짝' : '?')
-            : 'BET',
-        320,
-        100
-    );
-
-    return new AttachmentBuilder(await canvas.encode('png'), { name: 'game.png' });
-}
-
-function createComponents(step, choice) {
+function createButtons(step, choice, bet) {
     return [
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('bet_-100').setLabel('-100').setStyle(ButtonStyle.Danger).setDisabled(step !== 'bet'),
@@ -95,9 +43,9 @@ function createComponents(step, choice) {
         new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('next')
-                .setLabel('베팅 확정')
+                .setLabel(`베팅 확정 (${bet}P)`)
                 .setStyle(ButtonStyle.Success)
-                .setDisabled(step !== 'bet')
+                .setDisabled(step !== 'bet' || bet <= 0)
         ),
 
         new ActionRowBuilder().addComponents(
@@ -144,18 +92,21 @@ module.exports = {
         let currentBet = Math.min(100, users[userId].point);
         let selectedChoice = null;
 
-        const attachment = await renderCanvas(currentBet, selectedChoice, step);
-
-        const embed = new EmbedBuilder()
-            .setTitle('🎲 홀짝')
-            .setDescription(`보유 포인트: ${users[userId].point.toLocaleString()}P`)
-            .setImage('attachment://game.png')
-            .setColor('#5865F2');
+        function makeEmbed() {
+            return new EmbedBuilder()
+                .setTitle('🎲 홀짝 게임')
+                .setColor('#5865F2')
+                .setDescription(
+                    `보유 포인트: **${users[userId].point.toLocaleString()}P**\n\n` +
+                    `현재 단계: **${step === 'bet' ? '베팅 설정' : '홀 / 짝 선택'}**\n` +
+                    `베팅 금액: **${currentBet}P**\n` +
+                    `선택: **${selectedChoice ?? '없음'}**`
+                );
+        }
 
         const msg = await interaction.reply({
-            embeds: [embed],
-            files: [attachment],
-            components: createComponents(step, selectedChoice),
+            embeds: [makeEmbed()],
+            components: createButtons(step, selectedChoice, currentBet),
             fetchReply: true
         });
 
@@ -175,8 +126,8 @@ module.exports = {
                 if (action === 'max') {
                     currentBet = point;
                 } else {
-                    const val = parseInt(action);
-                    currentBet = Math.max(0, Math.min(point, currentBet + val));
+                    const value = parseInt(action);
+                    currentBet = Math.max(0, Math.min(point, currentBet + value));
                 }
             }
 
@@ -198,25 +149,16 @@ module.exports = {
             }
 
             if (i.customId === 'run') {
-                if (!selectedChoice || step !== 'choice') {
-                    return i.reply({ content: '선택을 완료하세요.', ephemeral: true });
+                if (!selectedChoice) {
+                    return i.reply({ content: '홀/짝을 선택하세요.', ephemeral: true });
                 }
                 collector.stop('run');
                 return i.update({ components: [] });
             }
 
-            const updated = await renderCanvas(currentBet, selectedChoice, step);
-
-            const newEmbed = new EmbedBuilder()
-                .setTitle('🎲 홀짝')
-                .setDescription(`보유 포인트: ${point.toLocaleString()}P`)
-                .setImage('attachment://game.png')
-                .setColor('#5865F2');
-
             await i.update({
-                embeds: [newEmbed],
-                files: [updated],
-                components: createComponents(step, selectedChoice)
+                embeds: [makeEmbed()],
+                components: createButtons(step, selectedChoice, currentBet)
             });
         });
 
@@ -241,34 +183,16 @@ module.exports = {
 
                 saveUserData(users);
 
-                const canvas = createCanvas(400, 200);
-                const ctx = canvas.getContext('2d');
-
-                ctx.fillStyle = win ? '#1f8b4c' : '#ad1457';
-                ctx.fillRect(0, 0, 400, 200);
-
-                ctx.fillStyle = '#fff';
-                ctx.font = 'bold 26px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-
-                ctx.fillText(win ? '승리!' : '패배!', 200, 60);
-                ctx.font = '18px sans-serif';
-                ctx.fillText(`결과: ${dice} (${resultText})`, 200, 110);
-                ctx.fillText(`${before} → ${users[userId].point}`, 200, 150);
-
-                const resultImg = new AttachmentBuilder(await canvas.encode('png'), {
-                    name: 'result.png'
-                });
-
-                const resultEmbed = new EmbedBuilder()
-                    .setTitle(win ? '🎉 승리' : '💥 패배')
-                    .setImage('attachment://result.png')
-                    .setColor(win ? '#2ecc71' : '#e74c3c');
-
                 return interaction.editReply({
-                    embeds: [resultEmbed],
-                    files: [resultImg],
+                    embeds: [
+                        new EmbedBuilder()
+                            .setTitle(win ? '승리!' : '패배')
+                            .setColor(win ? '#2ecc71' : '#e74c3c')
+                            .setDescription(
+                                `🎲 결과: **${dice} (${resultText})**\n` +
+                                `💰 ${before}P → ${users[userId].point}P`
+                            )
+                    ],
                     components: []
                 });
             }
