@@ -1,4 +1,3 @@
-
 const {
     SlashCommandBuilder,
     EmbedBuilder,
@@ -12,6 +11,7 @@ const path = require("path");
 
 const dbPath = path.join(__dirname, "..", "data", "users.json");
 
+/* ================= DB ================= */
 function loadDB() {
     if (!fs.existsSync(dbPath)) return {};
     return JSON.parse(fs.readFileSync(dbPath, "utf-8"));
@@ -21,7 +21,7 @@ function saveDB(data) {
     fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
 }
 
-/* ================= PLAYER ================= */
+/* ================= GAME ================= */
 class Player {
     constructor(id, name) {
         this.id = id;
@@ -30,7 +30,6 @@ class Player {
         this.stand = false;
         this.bust = false;
         this.die = false;
-        this.bet = 1000;
     }
 
     add(card) {
@@ -84,9 +83,10 @@ class Deck {
     }
 }
 
-/* ================= GAME ================= */
+/* ================= GAME CLASS ================= */
 class Game {
-    constructor() {
+    constructor(hostId) {
+        this.hostId = hostId;
         this.players = new Map();
         this.deck = new Deck();
         this.turnOrder = [];
@@ -112,20 +112,20 @@ class Game {
         }
     }
 
-    currentPlayer() {
+    current() {
         return this.players.get(this.turnOrder[this.index]);
     }
 
-    nextTurn() {
-        let tries = 0;
+    next() {
+        let loop = 0;
 
-        while (tries < this.turnOrder.length) {
+        while (loop < this.turnOrder.length) {
             this.index = (this.index + 1) % this.turnOrder.length;
 
             const p = this.players.get(this.turnOrder[this.index]);
 
             if (!p.stand && !p.bust && !p.die) return;
-            tries++;
+            loop++;
         }
     }
 
@@ -140,37 +140,34 @@ class Game {
         this.dealer.hand.push(this.deck.draw());
         this.dealer.hand.push(this.deck.draw());
 
-        let total = this.calc(this.dealer.hand);
+        const calc = (hand) => {
+            let sum = 0;
+            let ace = 0;
 
-        while (total < 17) {
-            this.dealer.hand.push(this.deck.draw());
-            total = this.calc(this.dealer.hand);
-        }
-
-        this.dealer.total = total;
-    }
-
-    calc(hand) {
-        let sum = 0;
-        let ace = 0;
-
-        for (const c of hand) {
-            if (c === 1) {
-                ace++;
-                sum += 1;
-            } else if (c >= 11) {
-                sum += 10;
-            } else {
-                sum += c;
+            for (const c of hand) {
+                if (c === 1) {
+                    ace++;
+                    sum += 1;
+                } else if (c >= 11) {
+                    sum += 10;
+                } else {
+                    sum += c;
+                }
             }
+
+            while (ace > 0 && sum + 10 <= 21) {
+                sum += 10;
+                ace--;
+            }
+
+            return sum;
+        };
+
+        while (calc(this.dealer.hand) < 17) {
+            this.dealer.hand.push(this.deck.draw());
         }
 
-        while (ace > 0 && sum + 10 <= 21) {
-            sum += 10;
-            ace--;
-        }
-
-        return sum;
+        this.dealer.total = calc(this.dealer.hand);
     }
 }
 
@@ -178,16 +175,7 @@ class Game {
 const games = new Map();
 
 /* ================= BUTTONS ================= */
-function panelButtons() {
-    return new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId("join")
-            .setLabel("JOIN")
-            .setStyle(ButtonStyle.Success)
-    );
-}
-
-function gameButtons() {
+function buttons() {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId("hit").setLabel("HIT").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId("stand").setLabel("STAND").setStyle(ButtonStyle.Primary),
@@ -199,44 +187,45 @@ function gameButtons() {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("blackjack")
-        .setDescription("30초 자동 블랙잭"),
+        .setDescription("블랙잭"),
 
     async execute(interaction) {
 
-        const channelId = interaction.channelId;
-
-        const game = new Game();
-        games.set(channelId, game);
-
+        /* ================= MESSAGE KEY ================= */
         const msg = await interaction.reply({
             embeds: [
                 new EmbedBuilder()
-                    .setTitle("🃏 블랙잭 모집중")
-                    .setDescription("30초 후 자동 시작\nJOIN으로 참여하세요")
+                    .setTitle("🃏 블랙잭 모집")
+                    .setDescription("30초 후 자동 시작")
             ],
-            components: [panelButtons()],
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId("join")
+                        .setLabel("JOIN")
+                        .setStyle(ButtonStyle.Success)
+                )
+            ],
             fetchReply: true
         });
 
-        /* ================= JOIN ================= */
+        const messageId = msg.id;
+
+        const game = new Game(interaction.user.id);
+        games.set(messageId, game);
+
+        /* ================= LOBBY ================= */
         const collector = msg.createMessageComponentCollector({
             time: 30000
         });
 
         collector.on("collect", async i => {
 
-            const game = games.get(channelId);
+            const game = games.get(messageId);
             if (!game) return;
 
             if (i.customId === "join") {
-                const ok = game.addPlayer(i.user.id, i.user.username);
-
-                if (!ok) {
-                    return i.reply({
-                        content: "참가 실패",
-                        ephemeral: true
-                    });
-                }
+                game.addPlayer(i.user.id, i.user.username);
 
                 return i.reply({
                     content: "참가 완료",
@@ -248,37 +237,36 @@ module.exports = {
         /* ================= AUTO START ================= */
         collector.on("end", async () => {
 
-            const game = games.get(channelId);
+            const game = games.get(messageId);
             if (!game) return;
 
             game.start();
 
-            const p = game.currentPlayer();
+            const p = game.current();
 
             await interaction.editReply({
                 embeds: [
                     new EmbedBuilder()
                         .setTitle("🎮 게임 시작")
                         .setDescription(
-                            `현재 턴: ${p.name}\n카드: ${p.handText()}\n합계: ${p.total}`
+                            `턴: ${p.name}\n카드: ${p.handText()}\n합계: ${p.total}`
                         )
                 ],
-                components: [gameButtons()]
+                components: [buttons()]
             });
 
-            /* ================= GAME LOOP ================= */
-            const msg2 = await interaction.fetchReply();
+            const gameMsg = await interaction.fetchReply();
 
-            const gameCollector = msg2.createMessageComponentCollector({
+            const gameCollector = gameMsg.createMessageComponentCollector({
                 time: 600000
             });
 
             gameCollector.on("collect", async i => {
 
-                const game = games.get(channelId);
+                const game = games.get(messageId);
                 if (!game) return;
 
-                const player = game.currentPlayer();
+                const player = game.current();
                 if (!player) return;
 
                 if (i.user.id !== player.id) {
@@ -295,19 +283,19 @@ module.exports = {
 
                     if (player.total > 21) {
                         player.bust = true;
-                        game.nextTurn();
+                        game.next();
                     }
                 }
 
                 if (i.customId === "stand") {
                     player.stand = true;
-                    game.nextTurn();
+                    game.next();
                 }
 
                 if (i.customId === "die") {
                     player.die = true;
                     player.stand = true;
-                    game.nextTurn();
+                    game.next();
                 }
 
                 if (game.finished()) {
@@ -329,7 +317,7 @@ module.exports = {
                         }
                     }
 
-                    games.delete(channelId);
+                    games.delete(messageId);
 
                     return interaction.editReply({
                         embeds: [
@@ -341,7 +329,7 @@ module.exports = {
                     });
                 }
 
-                const next = game.currentPlayer();
+                const next = game.current();
 
                 return interaction.editReply({
                     embeds: [
@@ -351,7 +339,7 @@ module.exports = {
                                 `턴: ${next.name}\n카드: ${next.handText()}\n합계: ${next.total}`
                             )
                     ],
-                    components: [gameButtons()]
+                    components: [buttons()]
                 });
             });
         });
