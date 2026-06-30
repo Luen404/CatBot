@@ -7,7 +7,6 @@ const {
     AttachmentBuilder
 } = require('discord.js');
 
-const { createCanvas } = require('@napi-rs/canvas');
 const fs = require('fs');
 const path = require('path');
 
