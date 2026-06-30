@@ -8,6 +8,7 @@ class Player {
         this.bust = false;
         this.result = null;
         this.total = 0;
+        this.die = false;
     }
 
     addCard(card) {
@@ -33,6 +34,10 @@ class Player {
         }
 
         this.total = total;
+    }
+    
+    setDie() {
+    this.die = true;
     }
 
     setStand() {
