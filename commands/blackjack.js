@@ -202,12 +202,14 @@ function buttons() {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("블랙잭")
-        .setDescription("포인트를 걸고 도박을 해요"),
+        .setDescription("최대 4명과 같이 즐길수있어요"),
 
     async execute(interaction) {
 
-        /* ================= GAME KEY = MESSAGE ID ================= */
+        const channelId = interaction.channelId;
+
         const game = new Game(interaction.user.id);
+        games.set(channelId, game);
 
         const panel = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -221,19 +223,16 @@ module.exports = {
                 .setStyle(ButtonStyle.Primary)
         );
 
-        const msg = await interaction.reply({
+        await interaction.reply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle("🃏 BLACKJACK")
                     .setDescription("JOIN 후 START")
             ],
-            components: [panel],
-            fetchReply: true
+            components: [panel]
         });
 
-        /* 🔥 핵심: messageId 기준 저장 */
-        const gameId = msg.id;
-        games.set(gameId, game);
+        const msg = await interaction.fetchReply();
 
         const collector = msg.createMessageComponentCollector({
             time: 600000
@@ -241,11 +240,11 @@ module.exports = {
 
         collector.on("collect", async i => {
 
-            const game = games.get(gameId);
+            const game = games.get(channelId);
 
             if (!game) {
                 return i.reply({
-                    content: "게임 없음 (이미 종료됨)",
+                    content: "게임 없음 (종료됨)",
                     ephemeral: true
                 });
             }
@@ -288,7 +287,9 @@ module.exports = {
 
                 const p = game.currentPlayer();
 
-                return i.update({
+                await i.deferUpdate();
+
+                return interaction.editReply({
                     embeds: [
                         new EmbedBuilder()
                             .setTitle("🎮 게임 시작")
@@ -363,9 +364,9 @@ module.exports = {
                 }
 
                 saveDB(db);
-                games.delete(gameId);
+                games.delete(channelId);
 
-                return i.editReply({
+                return interaction.editReply({
                     embeds: [
                         new EmbedBuilder()
                             .setTitle("🏁 게임 종료")
@@ -377,7 +378,7 @@ module.exports = {
 
             const next = game.currentPlayer();
 
-            return i.editReply({
+            return interaction.editReply({
                 embeds: [
                     new EmbedBuilder()
                         .setTitle("🃏 진행 중")
