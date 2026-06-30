@@ -186,7 +186,7 @@ class Game {
     }
 }
 
-/* ================= STORE ================= */
+/* ================= GAME STORE (핵심 수정) ================= */
 const games = new Map();
 
 /* ================= BUTTONS ================= */
@@ -202,16 +202,12 @@ function buttons() {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName("블랙잭")
-        .setDescription("도박을 해요"),
+        .setDescription("포인트를 걸고 도박을 해요"),
 
     async execute(interaction) {
-        const channelId = interaction.channelId;
 
-        if (!games.has(channelId)) {
-            games.set(channelId, new Game(interaction.user.id));
-        }
-
-        const game = games.get(channelId);
+        /* ================= GAME KEY = MESSAGE ID ================= */
+        const game = new Game(interaction.user.id);
 
         const panel = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
@@ -235,11 +231,24 @@ module.exports = {
             fetchReply: true
         });
 
+        /* 🔥 핵심: messageId 기준 저장 */
+        const gameId = msg.id;
+        games.set(gameId, game);
+
         const collector = msg.createMessageComponentCollector({
             time: 600000
         });
 
         collector.on("collect", async i => {
+
+            const game = games.get(gameId);
+
+            if (!game) {
+                return i.reply({
+                    content: "게임 없음 (이미 종료됨)",
+                    ephemeral: true
+                });
+            }
 
             /* ================= JOIN ================= */
             if (i.customId === "join") {
@@ -247,7 +256,7 @@ module.exports = {
 
                 if (!ok) {
                     return i.reply({
-                        content: "참가 실패 (포인트 부족 / 인원 초과 / 중복 / 시작됨)",
+                        content: "참가 실패",
                         ephemeral: true
                     });
                 }
@@ -258,7 +267,7 @@ module.exports = {
                 });
             }
 
-            /* ================= START (HOST ONLY) ================= */
+            /* ================= START ================= */
             if (i.customId === "start") {
 
                 if (i.user.id !== game.hostId) {
@@ -330,9 +339,8 @@ module.exports = {
                 game.dealerPlay();
 
                 const db = loadDB();
-                const dealerTotal = game.dealer.total;
 
-                let result = `딜러: ${dealerTotal}\n\n`;
+                let result = `딜러: ${game.dealer.total}\n\n`;
 
                 for (const p of game.players.values()) {
 
@@ -343,10 +351,10 @@ module.exports = {
                         continue;
                     }
 
-                    if (dealerTotal > 21 || p.total > dealerTotal) {
+                    if (game.dealer.total > 21 || p.total > game.dealer.total) {
                         db[p.id].Point += p.bet * 2;
                         result += `${p.name}: 승리 +${p.bet * 2}\n`;
-                    } else if (p.total === dealerTotal) {
+                    } else if (p.total === game.dealer.total) {
                         db[p.id].Point += p.bet;
                         result += `${p.name}: 무승부 +${p.bet}\n`;
                     } else {
@@ -355,12 +363,13 @@ module.exports = {
                 }
 
                 saveDB(db);
+                games.delete(gameId);
 
                 return i.editReply({
                     embeds: [
                         new EmbedBuilder()
                             .setTitle("🏁 게임 종료")
-                            .setDescription(`팟: ${game.pot}\n\n${result}`)
+                            .setDescription(result)
                     ],
                     components: []
                 });
