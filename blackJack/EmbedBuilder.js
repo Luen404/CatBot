@@ -1,6 +1,12 @@
 const { EmbedBuilder } = require("discord.js");
 
 class BlackjackEmbedBuilder {
+    static simple(text) {
+        return new EmbedBuilder()
+            .setColor(0x2b2d31)
+            .setDescription(text);
+    }
+
     static gameStatus(status) {
         const embed = new EmbedBuilder()
             .setTitle("🎴 Blackjack")
@@ -8,19 +14,22 @@ class BlackjackEmbedBuilder {
 
         let desc = "";
 
+        desc += `**Dealer**\n`;
+        desc += `Hand: ${status.dealer.hand}\n\n`;
+
         for (const p of status.players) {
             desc += `**${p.name}**\n`;
             desc += `Hand: ${p.hand}\n`;
             desc += `Total: ${p.total}\n`;
             desc += `Bet: ${p.bet}\n`;
-            desc += `Status: ${p.bust ? "BUST" : p.stand ? "STAND" : "PLAYING"}\n\n`;
+            desc += `Status: ${
+                p.die ? "DIE" :
+                p.bust ? "BUST" :
+                p.stand ? "STAND" : "PLAYING"
+            }\n\n`;
         }
 
-        desc += `**Dealer**\n`;
-        desc += `Hand: ${status.dealer.hand}\n`;
-
         embed.setDescription(desc);
-
         return embed;
     }
 
@@ -38,14 +47,7 @@ class BlackjackEmbedBuilder {
         desc += `\n**Dealer**\n${result.dealer.getHandString()}`;
 
         embed.setDescription(desc);
-
         return embed;
-    }
-
-    static simple(text) {
-        return new EmbedBuilder()
-            .setColor(0x5865f2)
-            .setDescription(text);
     }
 }
 
