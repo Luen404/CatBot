@@ -298,5 +298,5 @@ module.exports = {
         collector.on('end', () => {
             interaction.editReply({ components: [] }).catch(() => {});
         });
-    }
+    },
 };
