@@ -2,19 +2,13 @@ const Card = require("./Card");
 
 class Deck {
     constructor() {
-        this.reset();
+        this.cards = [];
+        this.create();
+        this.shuffle();
     }
 
-    reset() {
-        this.cards = [];
-
-        const suits = [
-            "spade",
-            "diamond",
-            "heart",
-            "club"
-        ];
-
+    create() {
+        const suits = ["♠", "♦", "♥", "♣"];
         const ranks = [
             "A",
             "2",
@@ -31,13 +25,13 @@ class Deck {
             "K"
         ];
 
+        this.cards = [];
+
         for (const suit of suits) {
             for (const rank of ranks) {
                 this.cards.push(new Card(suit, rank));
             }
         }
-
-        this.shuffle();
     }
 
     shuffle() {
@@ -49,58 +43,23 @@ class Deck {
                 this.cards[i]
             ];
         }
-
-        return this;
     }
 
     draw() {
-        if (this.cards.length <= 0) {
-            this.reset();
+        if (!this.cards.length) {
+            throw new Error("Deck is empty.");
         }
 
         return this.cards.pop();
-    }
-
-    drawMany(amount) {
-        const result = [];
-
-        for (let i = 0; i < amount; i++) {
-            result.push(this.draw());
-        }
-
-        return result;
     }
 
     remaining() {
         return this.cards.length;
     }
 
-    isEmpty() {
-        return this.cards.length === 0;
-    }
-
-    peek() {
-        return this.cards[this.cards.length - 1] ?? null;
-    }
-
-    add(card) {
-        this.cards.unshift(card);
-    }
-
-    addMany(cards) {
-        this.cards.unshift(...cards);
-    }
-
-    toJSON() {
-        return this.cards.map(card => card.toJSON());
-    }
-
-    static from(data) {
-        const deck = new Deck();
-
-        deck.cards = data.map(Card.from);
-
-        return deck;
+    reset() {
+        this.create();
+        this.shuffle();
     }
 }
 
