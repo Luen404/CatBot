@@ -86,12 +86,14 @@ class Deck {
 
 /* ================= GAME ================= */
 class Game {
-    constructor() {
+    constructor(hostId) {
+        this.hostId = hostId;
         this.players = new Map();
         this.deck = new Deck();
         this.turnOrder = [];
         this.index = 0;
         this.started = false;
+        this.pot = 0;
 
         this.dealer = {
             hand: [],
@@ -118,8 +120,6 @@ class Game {
                 return sum;
             }
         };
-
-        this.pot = 0;
     }
 
     addPlayer(id, name, bet = 1000) {
@@ -130,6 +130,7 @@ class Game {
         if (db[id].Point < bet) return false;
         if (this.players.size >= 4) return false;
         if (this.players.has(id)) return false;
+        if (this.started) return false;
 
         db[id].Point -= bet;
         saveDB(db);
@@ -179,7 +180,7 @@ class Game {
         }
     }
 
-    isFinished() {
+    finished() {
         return [...this.players.values()]
             .every(p => p.stand || p.bust || p.die);
     }
@@ -200,21 +201,28 @@ function buttons() {
 /* ================= COMMAND ================= */
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName("블랙잭")
-        .setDescription("포인트를 걸고 도박을 합니다"),
+        .setName("blackjack")
+        .setDescription("블랙잭"),
 
     async execute(interaction) {
         const channelId = interaction.channelId;
 
         if (!games.has(channelId)) {
-            games.set(channelId, new Game());
+            games.set(channelId, new Game(interaction.user.id));
         }
 
         const game = games.get(channelId);
 
         const panel = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId("join").setLabel("JOIN").setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId("start").setLabel("START").setStyle(ButtonStyle.Primary)
+            new ButtonBuilder()
+                .setCustomId("join")
+                .setLabel("JOIN")
+                .setStyle(ButtonStyle.Success),
+
+            new ButtonBuilder()
+                .setCustomId("start")
+                .setLabel("START")
+                .setStyle(ButtonStyle.Primary)
         );
 
         const msg = await interaction.reply({
@@ -227,7 +235,9 @@ module.exports = {
             fetchReply: true
         });
 
-        const collector = msg.createMessageComponentCollector({ time: 600000 });
+        const collector = msg.createMessageComponentCollector({
+            time: 600000
+        });
 
         collector.on("collect", async i => {
 
@@ -237,7 +247,7 @@ module.exports = {
 
                 if (!ok) {
                     return i.reply({
-                        content: "포인트 부족 또는 참가 불가",
+                        content: "참가 실패 (포인트 부족 / 인원 초과 / 중복 / 시작됨)",
                         ephemeral: true
                     });
                 }
@@ -248,8 +258,23 @@ module.exports = {
                 });
             }
 
-            /* ================= START ================= */
+            /* ================= START (HOST ONLY) ================= */
             if (i.customId === "start") {
+
+                if (i.user.id !== game.hostId) {
+                    return i.reply({
+                        content: "호스트만 시작 가능",
+                        ephemeral: true
+                    });
+                }
+
+                if (game.started) {
+                    return i.reply({
+                        content: "이미 시작됨",
+                        ephemeral: true
+                    });
+                }
+
                 game.start();
 
                 const p = game.currentPlayer();
@@ -272,7 +297,7 @@ module.exports = {
 
             if (i.user.id !== player.id) {
                 return i.reply({
-                    content: "턴이 아닙니다",
+                    content: "턴 아님",
                     ephemeral: true
                 });
             }
@@ -300,34 +325,31 @@ module.exports = {
             }
 
             /* ================= END ================= */
-            if (game.isFinished()) {
+            if (game.finished()) {
 
                 game.dealerPlay();
 
                 const db = loadDB();
-
                 const dealerTotal = game.dealer.total;
 
                 let result = `딜러: ${dealerTotal}\n\n`;
 
                 for (const p of game.players.values()) {
 
+                    if (!db[p.id]) db[p.id] = { Point: 0 };
+
                     if (p.die || p.bust) {
                         result += `${p.name}: 패배\n`;
                         continue;
                     }
 
-                    if (!db[p.id]) db[p.id] = { Point: 0 };
-
                     if (dealerTotal > 21 || p.total > dealerTotal) {
                         db[p.id].Point += p.bet * 2;
                         result += `${p.name}: 승리 +${p.bet * 2}\n`;
-                    }
-                    else if (p.total === dealerTotal) {
+                    } else if (p.total === dealerTotal) {
                         db[p.id].Point += p.bet;
                         result += `${p.name}: 무승부 +${p.bet}\n`;
-                    }
-                    else {
+                    } else {
                         result += `${p.name}: 패배\n`;
                     }
                 }
