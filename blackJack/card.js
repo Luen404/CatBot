@@ -5,50 +5,28 @@ class Card {
     }
 
     getValue() {
+        if (["J", "Q", "K"].includes(this.rank)) return 10;
         if (this.rank === "A") return 11;
-
-        if (["J", "Q", "K"].includes(this.rank)) {
-            return 10;
-        }
-
         return Number(this.rank);
     }
 
     getSuitPriority() {
-        return {
-            spade: 4,
-            diamond: 3,
-            heart: 2,
-            club: 1
-        }[this.suit] ?? 0;
-    }
-
-    getSuitSymbol() {
-        return {
-            spade: "♠",
-            diamond: "♦",
-            heart: "♥",
-            club: "♣"
-        }[this.suit] ?? "?";
+        switch (this.suit) {
+            case "♠":
+                return 4;
+            case "♦":
+                return 3;
+            case "♥":
+                return 2;
+            case "♣":
+                return 1;
+            default:
+                return 0;
+        }
     }
 
     toString() {
-        return `${this.getSuitSymbol()}${this.rank}`;
-    }
-
-    display() {
-        return `\`${this.getSuitSymbol()} ${this.rank}\``;
-    }
-
-    toJSON() {
-        return {
-            suit: this.suit,
-            rank: this.rank
-        };
-    }
-
-    static from(data) {
-        return new Card(data.suit, data.rank);
+        return `${this.suit}${this.rank}`;
     }
 }
 
