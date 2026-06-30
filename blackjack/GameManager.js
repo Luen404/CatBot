@@ -70,25 +70,39 @@ class GameManager {
         if (!game) return null;
 
         const id = game.turnOrder[game.currentTurnIndex];
-        return game.players.get(id);
+        return game.players.get(id) || null;
     }
 
     nextTurn(channelId) {
         const game = this.games.get(channelId);
         if (!game) return;
 
-        let loop = 0;
+        const total = game.turnOrder.length;
+        if (total === 0) return;
 
-        while (loop < game.turnOrder.length) {
+        let safety = 0;
+
+        while (safety < total) {
             game.currentTurnIndex =
-                (game.currentTurnIndex + 1) % game.turnOrder.length;
+                (game.currentTurnIndex + 1) % total;
 
             const id = game.turnOrder[game.currentTurnIndex];
             const p = game.players.get(id);
 
-            if (!p.die && !p.bust && !p.stand) return;
-            loop++;
+            if (!p) {
+                safety++;
+                continue;
+            }
+
+            if (!p.die && !p.bust && !p.stand) {
+                return;
+            }
+
+            safety++;
         }
+
+        // 👉 모든 플레이어 종료 상태면 턴 종료
+        game.currentTurnIndex = 0;
     }
 
     playerHit(channelId, userId) {
@@ -102,9 +116,17 @@ class GameManager {
 
         player.addCard(game.deck.draw());
 
-        if (player.total >= 21) {
+        if (player.total > 21) {
+            player.bust = true;
+            player.stand = true;
+            this.nextTurn(channelId);
+            return true;
+        }
+
+        if (player.total === 21) {
             player.setStand();
             this.nextTurn(channelId);
+            return true;
         }
 
         return true;
@@ -146,11 +168,8 @@ class GameManager {
         const game = this.games.get(channelId);
         if (!game) return false;
 
-        for (const p of game.players.values()) {
-            if (!p.stand && !p.bust && !p.die) return false;
-        }
-
-        return true;
+        return [...game.players.values()]
+            .every(p => p.stand || p.bust || p.die);
     }
 
     finishGame(channelId) {
@@ -168,13 +187,11 @@ class GameManager {
             const result = resolveResult(p, game.dealer);
             p.result = result;
 
-            if (p.die) continue;
+            if (p.die || p.bust) continue;
 
-            if (result === "player") {
-                if (p.total > best) {
-                    best = p.total;
-                    winnerId = p.id;
-                }
+            if (result === "player" && p.total > best && p.total <= 21) {
+                best = p.total;
+                winnerId = p.id;
             }
         }
 
